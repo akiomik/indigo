@@ -1,23 +1,25 @@
 package labeling
 
 import (
-	"bytes"
+	//"bytes"
 	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"os"
-	"time"
+	//"time"
 
 	"github.com/bluesky-social/indigo/api"
-	bsky "github.com/bluesky-social/indigo/api/bsky"
+	//bsky "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/carstore"
 	"github.com/bluesky-social/indigo/events"
 	"github.com/bluesky-social/indigo/indexer"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/bluesky-social/indigo/pds"
-	"github.com/bluesky-social/indigo/repo"
+	"github.com/bluesky-social/indigo/bgs"
+	//"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/repomgr"
-	util "github.com/bluesky-social/indigo/util"
+	//util "github.com/bluesky-social/indigo/util"
+	"github.com/bluesky-social/indigo/models"
 
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log"
@@ -35,7 +37,7 @@ type Server struct {
 	db         *gorm.DB
 	cs         *carstore.CarStore
 	repoman    *repomgr.RepoManager
-	bgsSlurper *pds.Slurper
+	bgsSlurper *bgs.Slurper
 	levents    *events.LabelEventManager
 	echo       *echo.Echo
 	user       *LabelmakerRepoConfig
@@ -95,8 +97,9 @@ func NewServer(db *gorm.DB, cs *carstore.CarStore, keyFile, repoDid, repoHandle,
 		log.Infof("found labelmaker repo: %s", head)
 	}
 
-	slurp := pds.NewSlurper(s.handleBgsRepoEvent, db, s.user.signingKey)
-	s.bgsSlurper = &slurp
+	// TODO(bnewbold): enforce ssl (last boolean argument here)
+	slurp := bgs.NewSlurper(db, s.handleBgsRepoEvent, false)
+	s.bgsSlurper = slurp
 
 	// subscribe our RepoEvent slurper to the BGS, to receive incoming records for labeler
 	s.bgsSlurper.SubscribeToPds(ctx, bgsUrl)
@@ -121,25 +124,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 // incoming repo events
-func (s *Server) handleBgsRepoEvent(ctx context.Context, host *pds.Peering, evt *events.RepoEvent) error {
+func (s *Server) handleBgsRepoEvent(ctx context.Context, pds *models.PDS, evt *events.RepoStreamEvent) error {
 	log.Info("got RepoEvent from BGS")
-	now := time.Now().Format(util.ISO8601)
+	// XXX: now := time.Now().Format(util.ISO8601)
 	switch {
-	case evt.RepoAppend != nil:
-		if evt.RepoAppend.Rebase {
-			// TODO: guess we could label the whole repo here, or something?
-			log.Warn("TODO: rebase events not yet labeled/handled in any special way")
-		}
+	case evt.Append != nil:
+		/* XXX(bnewbold): waiting for "re-add ops to events" branch to land to finish this update
 		// this is where we take incoming RepoEvents and label them
 		// use an in-memory blockstore with repo wrapper to parse CAR
 		// NOTE: could refactor to parse ops first, so we don't bother parsing the CAR if there are no posts/profiles to process (a common case, for likes/follows/reposts/etc)
-		sliceRepo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(evt.RepoAppend.Car))
+		sliceRepo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(evt.Append.Blocks))
 		if err != nil {
 			log.Warnw("failed to parse CAR slice", "repoErr", err)
 			return err
 		}
 		var labels []events.Label = []events.Label{}
-		for _, op := range evt.RepoAppend.Ops {
+		for _, op := range evt.Append.Ops {
 			uri := "at://" + evt.Repo + "/" + op.Col + "/" + op.Rkey
 			// filter to creation/update of ony post/profile records
 			// TODO(bnewbold): how do I 'switch' on a tuple here in golang, instead of nested switch?
@@ -223,6 +223,7 @@ func (s *Server) handleBgsRepoEvent(ctx context.Context, host *pds.Peering, evt 
 				return fmt.Errorf("failed to publish LabelEvent: %w", err)
 			}
 		}
+		*/
 		// TODO: update state that we successfully processed the repo event (aka, persist "last" seq in database, or something like that)
 		return nil
 	default:
